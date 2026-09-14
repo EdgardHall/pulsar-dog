@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pulsar-dog"
+version = "0.1.0"
+description = "Connection layer, safety envelope and teleoperation for a Unitree Go2 EDU"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+# The Unitree Python SDK is not published on PyPI; install it from source:
+#   git clone https://github.com/unitreerobotics/unitree_sdk2_python
+#   pip install -e unitree_sdk2_python
+gamepad = ["pygame>=2.5"]
+dev = ["pytest>=7.4", "ruff>=0.4"]
+
+[project.scripts]
+pulsar-dog = "pulsar_dog.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
