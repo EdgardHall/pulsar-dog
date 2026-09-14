@@ -138,3 +138,63 @@ def diagnose(network: NetworkConfig) -> list[Check]:
     )
 
     return checks
+
+
+def setup_commands(network: NetworkConfig) -> list[list[str]]:
+    """The privileged commands that put this host on the robot's subnet."""
+    return [
+        ["sudo", "ip", "addr", "add", f"{network.local_ip}/24", "dev", network.interface],
+        ["sudo", "ip", "link", "set", network.interface, "up"],
+    ]
+
+
+def run_command(command: list[str], timeout_s: int = 15) -> tuple[int, str]:
+    """Run one command, returning its exit code and combined output."""
+    try:
+        result = subprocess.run(
+            command, capture_output=True, text=True, timeout=timeout_s
+        )
+    except FileNotFoundError:
+        return 127, f"{command[0]}: not found"
+    except (subprocess.SubprocessError, OSError) as exc:
+        return 1, str(exc)
+    return result.returncode, (result.stdout + result.stderr).strip()
+
+
+def configure_interface(network: NetworkConfig, dry_run: bool = False) -> list[Check]:
+    """Assign the host address and bring the interface up.
+
+    Idempotent: an address that is already assigned is reported as satisfied
+    rather than as a failure, so the command is safe to re-run at the start of
+    every session.
+    """
+    checks: list[Check] = []
+
+    existing = interface_addresses(network.interface)
+    if any(_same_subnet(address, network.robot_ip) for address in existing):
+        return [
+            Check(
+                "address already assigned",
+                True,
+                f"{network.interface} already reaches {network.robot_ip} "
+                f"via {', '.join(existing)}",
+            )
+        ]
+
+    for command in setup_commands(network):
+        printable = " ".join(command)
+        if dry_run:
+            checks.append(Check("would run", True, printable))
+            continue
+        code, output = run_command(command)
+        # "RTNETLINK answers: File exists" means another run already did this.
+        already = "file exists" in output.lower()
+        checks.append(
+            Check(
+                printable,
+                code == 0 or already,
+                "already set" if already else (output or "ok"),
+            )
+        )
+
+    return checks

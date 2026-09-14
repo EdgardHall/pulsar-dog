@@ -32,7 +32,8 @@ pip install -e unitree_sdk2_python
 pulsar-dog --backend sim info
 pulsar-dog --backend sim teleop
 
-# 2. Avec le robot : d'abord vérifier la liaison, sans rien bouger
+# 2. Avec le robot : poser l'IP et vérifier la liaison, sans rien bouger
+pulsar-dog setup --interface enp3s0        # --dry-run pour voir les commandes d'abord
 pulsar-dog doctor
 
 # 3. Une lecture de télémétrie
@@ -43,7 +44,13 @@ pulsar-dog teleop --max-vx 0.3 --max-vyaw 0.5 --record
 
 # 5. Marche pilotée par une policy, 20 s, enveloppe réduite
 pulsar-dog walk --policy command --duration 20 --max-vx 0.25 --record
+
+# 6. Relire ce qui s'est passé
+pulsar-dog replay logs/walk-*.jsonl
 ```
+
+Première séance avec le robot : suis [`docs/RUNBOOK.md`](docs/RUNBOOK.md), qui donne la
+sortie attendue à chaque étape.
 
 `doctor` vérifie l'interface réseau, l'adresse IP, le ping du robot et la présence du
 SDK — c'est ce qui explique la quasi-totalité des « le SDK se bloque sans message ».
@@ -78,6 +85,26 @@ AZERTY et QWERTY sont mappés tous les deux. Un terminal ne signale jamais le
 relâchement d'une touche : chaque appui rafraîchit une échéance de 220 ms, donc
 lâcher la touche suffit à arrêter le robot.
 
+### Manette
+
+```bash
+pulsar-dog gamepad-probe                   # relever les indices de TON pad
+pulsar-dog teleop --input gamepad --max-vx 0.2 --record
+```
+
+Deux choses que le clavier ne peut pas donner, et qui comptent dès que 15 kg marchent
+pour de vrai :
+
+- **des axes analogiques** — un stick demande 0.12 m/s, une touche ne demande jamais
+  que le maximum ;
+- **un homme-mort** — le mouvement n'est autorisé que tant qu'un bouton est *maintenu*.
+  Tu lâches, tu poses la manette, tu t'éloignes : le robot s'arrête. C'est une propriété
+  du périphérique, pas du logiciel qui remarque que quelque chose ne va pas.
+
+La numérotation des axes et boutons change d'un pad, d'un driver et d'un OS à l'autre —
+d'où `gamepad-probe`. Si la manette est débranchée en cours de route, la boucle s'arrête :
+c'est elle qui autorise le mouvement, sans elle plus rien n'est autorisé.
+
 ## Locomotion pilotée par une policy
 
 La couche `locomotion/` reprend la structure des environnements Isaac Lab / Isaac Sim —
@@ -108,6 +135,22 @@ de 35°, corps effondré, batterie basse, télémétrie périmée ⇒ arrêt d'u
 Une fin de durée est en revanche un arrêt propre.
 
 Détails et checklist sim2real : [`docs/ISAAC_LAB_BRIDGE.md`](docs/ISAAC_LAB_BRIDGE.md).
+
+## Relecture des runs
+
+```
+$ pulsar-dog replay logs/walk-20260914T183434Z.jsonl
+600 samples, duration 12.1s, rate 49.7 Hz
+  odometry    2.35 m walked (drifts - not a position)
+  vx cmd      +0.00 .. +0.30  |████████████████████▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁████████████████████|
+  vx meas     +0.00 .. +0.30  |▅████████████████████▄▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▅███████████████████|
+  tracking    mean |cmd-meas| on vx = 0.011 m/s
+```
+
+Texte brut volontairement : la première chose qu'on fait après un run raté, c'est lire son
+log en SSH avec rien d'installé. Un `tracking` gros et constant, c'est une échelle qui ne
+correspond pas ; un `tracking` qui grandit, c'est de la latence. Une ligne `GAP` veut dire
+que la boucle a calé.
 
 ## Sécurité
 
@@ -150,13 +193,15 @@ with PulsarDog(Config.from_env()) as dog:
 ## Architecture
 
 ```
-cli.py          commandes : doctor, info, stand, sit, damp, teleop, record, walk
+cli.py          doctor · setup · gamepad-probe · replay · info · stand · sit ·
+                damp · teleop · record · walk
 robot.py        PulsarDog — un thread de contrôle possède le backend
 safety.py       écrêtage, limitation d'accélération, watchdog
 config.py       Config / SafetyLimits / NetworkConfig, surchargeables par env
 net.py          diagnostic de liaison
 telemetry.py    enregistrement JSONL
-teleop/         frontaux de pilotage (clavier)
+analysis.py     relecture des .jsonl, tracés ASCII
+teleop/         frontaux de pilotage : clavier · manette (homme-mort)
 locomotion/     commands · observations · policy · terminations · runner
 transport/      base.py (contrat) · sdk2.py (robot réel) · sim.py (sans robot)
 ```
@@ -173,7 +218,7 @@ pire qu'une session qui ne démarre pas.
 ## Tests
 
 ```bash
-pytest          # 103 tests, aucun robot requis
+pytest          # 146 tests, aucun robot requis
 ruff check .
 ```
 

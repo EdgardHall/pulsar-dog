@@ -39,6 +39,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("doctor", help="check the link without touching the robot")
 
+    setup = sub.add_parser(
+        "setup", help="put this host on the robot's subnet, then run the checks"
+    )
+    setup.add_argument("--local-ip", help="address to assign to this host")
+    setup.add_argument(
+        "--dry-run", action="store_true", help="print the commands instead of running them"
+    )
+
+    sub.add_parser(
+        "gamepad-probe", help="print live gamepad axes and buttons (no robot involved)"
+    )
+
+    replay = sub.add_parser("replay", help="summarise a recorded .jsonl run")
+    replay.add_argument("path", help="log file written by --record")
+    replay.add_argument("--width", type=int, default=60, help="plot width in columns")
+
     info = sub.add_parser("info", help="connect and print one telemetry sample")
     info.add_argument("--json", action="store_true", help="raw JSON instead of a summary")
 
@@ -46,7 +62,16 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("sit", help="lie down, joints still held")
     sub.add_parser("damp", help="release the joints - the robot goes limp")
 
-    teleop = sub.add_parser("teleop", help="drive from the keyboard")
+    teleop = sub.add_parser("teleop", help="drive from the keyboard or a gamepad")
+    teleop.add_argument(
+        "--input",
+        choices=["keyboard", "gamepad"],
+        default="keyboard",
+        help="gamepad adds analogue axes and a dead-man switch",
+    )
+    teleop.add_argument(
+        "--gamepad-index", type=int, default=0, help="which pad to use when several are plugged in"
+    )
     teleop.add_argument(
         "--no-stand",
         action="store_true",
@@ -92,6 +117,8 @@ def config_from_args(args: argparse.Namespace) -> Config:
         network = replace(network, interface=args.interface)
     if args.robot_ip:
         network = replace(network, robot_ip=args.robot_ip)
+    if getattr(args, "local_ip", None):
+        network = replace(network, local_ip=args.local_ip)
     if args.max_vx is not None:
         safety = replace(safety, max_vx=args.max_vx)
     if args.max_vy is not None:
@@ -117,6 +144,62 @@ def cmd_doctor(config: Config) -> int:
         return 1
     print("\nlink looks healthy")
     return 0
+
+
+def cmd_setup(config: Config, dry_run: bool) -> int:
+    print(f"interface {config.network.interface}, host {config.network.local_ip}/24")
+    for check in net.configure_interface(config.network, dry_run=dry_run):
+        print(check.render())
+    if dry_run:
+        return 0
+    print()
+    return cmd_doctor(config)
+
+
+def cmd_gamepad_probe() -> int:
+    """Live axis and button readout, so the user can map their own pad."""
+    import time as _time
+
+    from pulsar_dog.teleop import GamepadUnavailable, PygameGamepad
+
+    device = PygameGamepad()
+    try:
+        device.open()
+    except GamepadUnavailable as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    print(f"{device.name} - move the sticks and press the buttons, ctrl-c to stop\n")
+    try:
+        while True:
+            state = device.poll()
+            if state is None:
+                print("\ngamepad disconnected", file=sys.stderr)
+                return 1
+            axes = " ".join(f"{i}:{v:+.2f}" for i, v in enumerate(state.axes))
+            pressed = [str(i) for i, down in enumerate(state.buttons) if down]
+            print(
+                f"\raxes {axes} | pressed {' '.join(pressed) or '-':<20}",
+                end="",
+                flush=True,
+            )
+            _time.sleep(0.05)
+    except KeyboardInterrupt:
+        print()
+        return 0
+    finally:
+        device.close()
+
+
+def cmd_replay(path: str, width: int) -> int:
+    from pulsar_dog import analysis
+
+    try:
+        samples, skipped = analysis.load_samples(path)
+    except OSError as exc:
+        print(f"cannot read {path}: {exc}", file=sys.stderr)
+        return 2
+    print(analysis.render_report(path, samples, skipped, width=width))
+    return 0 if samples else 1
 
 
 def _summarise(state) -> str:
@@ -168,9 +251,16 @@ def cmd_posture(config: Config, action: str) -> int:
     return 0
 
 
-def cmd_teleop(config: Config, stand_first: bool, record: bool) -> int:
-    from pulsar_dog.teleop import KeyboardTeleop
+def cmd_teleop(config: Config, args: argparse.Namespace) -> int:
+    from pulsar_dog.teleop import (
+        GamepadTeleop,
+        GamepadUnavailable,
+        KeyboardTeleop,
+        PygameGamepad,
+    )
 
+    stand_first = not args.no_stand
+    record = args.record
     recorder = None
     with PulsarDog(config) as dog:
         try:
@@ -184,7 +274,16 @@ def cmd_teleop(config: Config, stand_first: bool, record: bool) -> int:
                 dog.stand_up()
                 time.sleep(2.0)
                 dog.balance_stand()
-            KeyboardTeleop(dog).run()
+            if args.input == "gamepad":
+                try:
+                    device = PygameGamepad(args.gamepad_index)
+                    reason = GamepadTeleop(dog, device, stream=sys.stdout).run()
+                except GamepadUnavailable as exc:
+                    print(f"\n{exc}", file=sys.stderr)
+                    return 2
+                print(f"teleop ended: {reason}")
+            else:
+                KeyboardTeleop(dog).run()
         finally:
             # Always land the robot rather than leaving it standing unattended.
             dog.set_state_listener(None)
@@ -337,7 +436,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "damp":
             return cmd_posture(config, "damp")
         if args.command == "teleop":
-            return cmd_teleop(config, stand_first=not args.no_stand, record=args.record)
+            return cmd_teleop(config, args)
+        if args.command == "setup":
+            return cmd_setup(config, args.dry_run)
+        if args.command == "gamepad-probe":
+            return cmd_gamepad_probe()
+        if args.command == "replay":
+            return cmd_replay(args.path, args.width)
         if args.command == "record":
             return cmd_record(config, args.seconds)
         if args.command == "walk":

@@ -112,6 +112,7 @@ class LocomotionRunner:
         )
         self._last_action = Velocity.zero()
         self._step_listener: Callable[[dict], None] | None = None
+        self._started = 0.0
 
     @property
     def observations(self) -> ObservationManager:
@@ -156,6 +157,7 @@ class LocomotionRunner:
         )
 
         started = time.monotonic()
+        self._started = started
         step = 0
         late = 0
         termination: Termination | None = None
@@ -217,6 +219,8 @@ class LocomotionRunner:
     def _emit(self, step: int, ctx: ObsContext, action: list[float], velocity: Velocity) -> None:
         record = {
             "step": step,
+            # Same key the telemetry recorder uses, so one reader covers both.
+            "t_rel": round(time.monotonic() - self._started, 4),
             "command": list(ctx.command.as_tuple()),
             "action": action,
             "velocity": list(velocity.as_tuple()),

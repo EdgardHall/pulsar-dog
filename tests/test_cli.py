@@ -128,3 +128,59 @@ def test_walk_on_a_robot_that_never_stood_up_ends_in_a_fault(capsys):
     rc = main(["--backend", "sim", "walk", "--duration", "0.5", "--no-stand"])
     assert rc == 1
     assert "base_height" in capsys.readouterr().out
+
+
+def test_setup_dry_run_prints_the_commands(capsys):
+    assert main(["--interface", "eth9", "setup", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "ip addr add" in out
+    assert "dev eth9" in out
+
+
+def test_setup_accepts_a_custom_host_address(capsys):
+    assert main(["setup", "--dry-run", "--local-ip", "192.168.123.50"]) == 0
+    assert "192.168.123.50/24" in capsys.readouterr().out
+
+
+def test_replay_summarises_a_recorded_run(tmp_path, capsys):
+    log = tmp_path / "walk.jsonl"
+    log.write_text(
+        "\n".join(
+            json.dumps(
+                {
+                    "t_rel": i * 0.02,
+                    "velocity": [0.4, 0.0, 0.0],
+                    "state": {
+                        "velocity": [0.35, 0.0, 0.0],
+                        "battery_soc": 90 - i // 40,
+                        "rpy": [0.0, 0.05, 0.0],
+                        "position": [i * 0.007, 0.0, 0.3],
+                    },
+                }
+            )
+            for i in range(80)
+        )
+    )
+    assert main(["replay", str(log)]) == 0
+    out = capsys.readouterr().out
+    assert "80 samples" in out
+    assert "vx cmd" in out
+    assert "odometry" in out
+
+
+def test_replay_reports_a_missing_file(capsys):
+    assert main(["replay", "/nope/missing.jsonl"]) == 2
+    assert "cannot read" in capsys.readouterr().err
+
+
+def test_replay_of_an_empty_log_is_not_a_success(tmp_path, capsys):
+    log = tmp_path / "empty.jsonl"
+    log.write_text("")
+    assert main(["replay", str(log)]) == 1
+
+
+def test_teleop_gamepad_without_a_pad_fails_cleanly(capsys):
+    # No pad and no pygame in this environment: it must say so, not traceback.
+    rc = main(["--backend", "sim", "teleop", "--input", "gamepad", "--no-stand"])
+    assert rc == 2
+    assert "gamepad" in capsys.readouterr().err.lower()

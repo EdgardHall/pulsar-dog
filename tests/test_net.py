@@ -45,3 +45,56 @@ def test_ping_returns_false_when_binary_is_missing(monkeypatch):
     monkeypatch.setattr(net.shutil, "which", lambda _name: None)
     assert net.ping("192.168.123.161") is False
     assert net.interface_addresses("eth0") == []
+
+
+def test_setup_commands_target_the_configured_interface():
+    commands = net.setup_commands(NetworkConfig(interface="enp3s0", local_ip="192.168.123.99"))
+    assert commands[0] == [
+        "sudo", "ip", "addr", "add", "192.168.123.99/24", "dev", "enp3s0",
+    ]
+    assert commands[1] == ["sudo", "ip", "link", "set", "enp3s0", "up"]
+
+
+def test_setup_is_skipped_when_the_address_is_already_there(monkeypatch):
+    monkeypatch.setattr(net, "interface_addresses", lambda _i: ["192.168.123.99/24"])
+    checks = net.configure_interface(NetworkConfig(interface="eth0"))
+    assert len(checks) == 1
+    assert checks[0].ok
+    assert "already" in checks[0].name
+
+
+def test_dry_run_only_prints(monkeypatch):
+    monkeypatch.setattr(net, "interface_addresses", lambda _i: [])
+    ran = []
+    monkeypatch.setattr(net, "run_command", lambda cmd, timeout_s=15: ran.append(cmd) or (0, ""))
+    checks = net.configure_interface(NetworkConfig(interface="eth0"), dry_run=True)
+    assert ran == []
+    assert all(c.ok and c.name == "would run" for c in checks)
+
+
+def test_an_already_assigned_address_is_not_a_failure(monkeypatch):
+    monkeypatch.setattr(net, "interface_addresses", lambda _i: [])
+    monkeypatch.setattr(
+        net,
+        "run_command",
+        lambda cmd, timeout_s=15: (2, "RTNETLINK answers: File exists"),
+    )
+    checks = net.configure_interface(NetworkConfig(interface="eth0"))
+    assert all(c.ok for c in checks)
+    assert "already set" in checks[0].detail
+
+
+def test_a_real_failure_is_reported(monkeypatch):
+    monkeypatch.setattr(net, "interface_addresses", lambda _i: [])
+    monkeypatch.setattr(
+        net, "run_command", lambda cmd, timeout_s=15: (1, "Cannot find device \"eth0\"")
+    )
+    checks = net.configure_interface(NetworkConfig(interface="eth0"))
+    assert not checks[0].ok
+    assert "Cannot find device" in checks[0].detail
+
+
+def test_run_command_reports_a_missing_binary():
+    code, output = net.run_command(["definitely-not-a-binary-xyz"])
+    assert code == 127
+    assert "not found" in output
