@@ -163,6 +163,9 @@ class Sdk2Backend:
     def balance_stand(self) -> None:
         self._call("BalanceStand")
 
+    def recovery_stand(self) -> None:
+        self._call("RecoveryStand")
+
     def damp(self) -> None:
         self._call("Damp")
 

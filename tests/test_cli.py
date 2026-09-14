@@ -184,3 +184,8 @@ def test_teleop_gamepad_without_a_pad_fails_cleanly(capsys):
     rc = main(["--backend", "sim", "teleop", "--input", "gamepad", "--no-stand"])
     assert rc == 2
     assert "gamepad" in capsys.readouterr().err.lower()
+
+
+def test_recovery_command_on_the_simulator(capsys):
+    assert main(["--backend", "sim", "recovery"]) == 0
+    assert "recovery_stand done" in capsys.readouterr().out

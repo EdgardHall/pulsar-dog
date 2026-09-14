@@ -55,6 +55,9 @@ class FakeDog:
     def balance_stand(self) -> None:
         self.calls.append("balance_stand")
 
+    def recovery_stand(self) -> None:
+        self.calls.append("recovery_stand")
+
     def damp(self) -> None:
         self.calls.append("damp")
 
@@ -240,6 +243,9 @@ class CountingBackend:
 
     def balance_stand(self) -> None:
         self.calls.append("balance_stand")
+
+    def recovery_stand(self) -> None:
+        self.calls.append("recovery_stand")
 
     def damp(self) -> None:
         self.calls.append("damp")

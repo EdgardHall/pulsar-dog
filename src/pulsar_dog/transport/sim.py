@@ -71,6 +71,14 @@ class SimBackend:
         self._standing = True
         self._mode = MODE_BALANCE_STAND
 
+    def recovery_stand(self) -> None:
+        # Recovery works from any posture, including a damped heap.
+        self._require_link()
+        self._integrate()
+        self._velocity = Velocity.zero()
+        self._standing = True
+        self._mode = MODE_BALANCE_STAND
+
     def damp(self) -> None:
         self._require_link()
         self._integrate()

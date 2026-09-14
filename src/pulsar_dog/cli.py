@@ -61,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("stand", help="stand up (balance stand)")
     sub.add_parser("sit", help="lie down, joints still held")
     sub.add_parser("damp", help="release the joints - the robot goes limp")
+    sub.add_parser("recovery", help="get back up after a fall (clears the e-stop)")
 
     teleop = sub.add_parser("teleop", help="drive from the keyboard or a gamepad")
     teleop.add_argument(
@@ -435,6 +436,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_posture(config, "stand_down")
         if args.command == "damp":
             return cmd_posture(config, "damp")
+        if args.command == "recovery":
+            return cmd_posture(config, "recovery_stand")
         if args.command == "teleop":
             return cmd_teleop(config, args)
         if args.command == "setup":

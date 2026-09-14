@@ -50,6 +50,9 @@ class FakeBackend:
     def balance_stand(self) -> None:
         self._record("balance_stand")
 
+    def recovery_stand(self) -> None:
+        self._record("recovery_stand")
+
     def damp(self) -> None:
         self._record("damp")
 
@@ -249,3 +252,23 @@ def test_context_manager_closes_on_exception(config):
         with PulsarDog(config, backend=backend):
             raise ZeroDivisionError
     assert backend.closed
+
+
+def test_recovery_stand_clears_a_latched_estop(dog):
+    handle, backend = dog
+    handle.emergency_stop()
+    assert handle.emergency_stopped
+    # A fall latches the e-stop, and recovery is exactly what you do next -
+    # so it must not be blocked by the latch it is meant to resolve.
+    handle.recovery_stand()
+    assert not handle.emergency_stopped
+    assert "recovery_stand" in backend.snapshot_calls()
+
+
+def test_recovery_stand_halts_before_getting_up(dog):
+    handle, backend = dog
+    handle.set_velocity(Velocity(vx=0.8))
+    assert wait_for(lambda: (backend.last_move() or Velocity.zero()).vx > 0.5)
+    handle.recovery_stand()
+    calls = backend.snapshot_calls()
+    assert calls[calls.index("recovery_stand") - 1] == "stop_move"

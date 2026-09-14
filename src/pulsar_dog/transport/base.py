@@ -79,6 +79,10 @@ class RobotBackend(Protocol):
     def balance_stand(self) -> None:
         """Stand with active balancing - the posture walking starts from."""
 
+    def recovery_stand(self) -> None:
+        """Get back up after a fall. The right call when the robot is down:
+        StandUp assumes it is already on its feet."""
+
     def damp(self) -> None:
         """Release the joints. The robot collapses; use only when it is low."""
 

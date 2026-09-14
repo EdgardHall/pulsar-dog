@@ -194,7 +194,7 @@ with PulsarDog(Config.from_env()) as dog:
 
 ```
 cli.py          doctor · setup · gamepad-probe · replay · info · stand · sit ·
-                damp · teleop · record · walk
+                damp · recovery · teleop · record · walk
 robot.py        PulsarDog — un thread de contrôle possède le backend
 safety.py       écrêtage, limitation d'accélération, watchdog
 config.py       Config / SafetyLimits / NetworkConfig, surchargeables par env
@@ -218,7 +218,7 @@ pire qu'une session qui ne démarre pas.
 ## Tests
 
 ```bash
-pytest          # 146 tests, aucun robot requis
+pytest          # 150 tests, aucun robot requis
 ruff check .
 ```
 

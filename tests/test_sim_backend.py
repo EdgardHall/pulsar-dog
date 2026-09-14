@@ -84,3 +84,19 @@ def test_damp_stops_and_drops(sim):
     assert state.position[0] == pytest.approx(0.5)
     assert state.velocity.is_zero()
     assert state.foot_force == (0, 0, 0, 0)
+
+
+def test_recovery_stand_gets_up_from_a_damped_heap(sim):
+    backend, clock = sim
+    backend.damp()
+    # A damped robot ignores walk commands; recovery must put it back on its feet.
+    backend.move(Velocity(vx=0.5))
+    clock.advance(1.0)
+    assert backend.read_state().position[0] == pytest.approx(0.0)
+
+    backend.recovery_stand()
+    backend.move(Velocity(vx=0.5))
+    clock.advance(1.0)
+    state = backend.read_state()
+    assert state.position[0] == pytest.approx(0.5)
+    assert state.foot_force == (120, 120, 120, 120)

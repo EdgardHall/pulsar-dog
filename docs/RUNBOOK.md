@@ -93,6 +93,10 @@ qu'elles **changent**.
 
 Pour le recoucher : `pulsar-dog sit`.
 
+**S'il est tombé** : `pulsar-dog recovery` (`RecoveryStand`), pas `stand` — `stand`
+suppose qu'il est déjà sur ses pattes. `recovery` lève aussi l'arrêt d'urgence, puisque
+c'est une chute qui l'a verrouillé.
+
 ## 5. Téléop
 
 ```bash
@@ -166,6 +170,7 @@ chemin que tout le reste, donc si ce chemin est cassé, ils le sont aussi.
 | `ChannelFactoryInitialize` se fige | pas d'adresse dans le `/24` du robot |
 | il se couche sans prévenir | batterie |
 | `stand` renvoie un code d'erreur non nul | le robot refuse la posture — vérifie qu'il est à plat au sol |
+| il est tombé et ne se relève pas | `pulsar-dog recovery`, pas `stand` |
 
 ---
 

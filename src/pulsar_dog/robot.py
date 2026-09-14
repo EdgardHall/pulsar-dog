@@ -192,6 +192,16 @@ class PulsarDog:
     def balance_stand(self) -> None:
         self._posture(lambda b: b.balance_stand())
 
+    def recovery_stand(self) -> None:
+        """Get back up after a fall.
+
+        Clears the e-stop first: a fall latches it, and the whole point of this
+        command is to act once the robot is already down.
+        """
+        if self.emergency_stopped:
+            self.clear_emergency_stop()
+        self._posture(lambda b: b.recovery_stand())
+
     def damp(self) -> None:
         """Release the joints. The robot goes limp - only from a low posture."""
         self._posture(lambda b: b.damp())
